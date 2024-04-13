@@ -1,73 +1,58 @@
-resource "aws_vpc" "myapp-vpc" {
-  cidr_block = var.vpc_cidr_block
+#resource "aws_vpc" "myapp-vpc" {
+#  cidr_block = var.vpc_cidr_block
+#  enable_dns_hostnames = true
+#  tags = {
+#    Name = "${var.env_prefix}-vpc"
+#  }
+#}
+
+terraform {
+  required_version = ">= 0.12.0"
+  backend "s3" {
+    bucket = "myapp-bucket-1989"
+    key = "myapp/terraform.tfstate"
+    region = "ap-southeast-1"
+  }
+}
+
+module "vpc" {
+  source = "terraform-aws-modules/vpc/aws"
+
+  name = "my-vpc"
+  cidr = var.vpc_cidr_block
+
+  azs             = [var.avail_zone]
+#  private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+  public_subnets  = [var.subnet_cidr_block]
+
+#  enable_nat_gateway = true
+  enable_vpn_gateway = true
   enable_dns_hostnames = true
+  enable_dns_support = true
+
   tags = {
     Name = "${var.env_prefix}-vpc"
   }
-}
 
-resource "aws_network_acl" "main" {
-  vpc_id = aws_vpc.myapp-vpc.id
-
-  egress {
-    protocol   = "-1"
-    rule_no    = 200
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 0
-    to_port    = 0
-  }
-
-  ingress {
-    protocol   = "-1"
-    rule_no    = 100
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 0
-    to_port    = 0
-  }
-
-#  ingress {
-#    protocol   = "-1"
-#    rule_no    = 200
-#    action     = "allow"
-#    cidr_block = "0.0.0.0/0"
-#    from_port = 8
-#    to_port = 0
-#    icmp_type  = 8
-#    icmp_code  = 0
-#  }
-#
-#  egress {
-#    protocol   = "-1"
-#    rule_no    = 200
-#    action     = "allow"
-#    cidr_block = "0.0.0.0/0"
-#    icmp_type = 8
-#    icmp_code  = 0
-#    from_port  = 0
-#    to_port    = 0
-#  }
-
-  tags = {
-    Name = "main"
+  public_subnet_tags = {
+    Name = "${var.env_prefix}-public-subnet"
   }
 }
 
-module "myapp-subnet" {
-  source            = "./modules/subnet"
-  subnet_cidr_block = var.subnet_cidr_block
-  vpc_id            = aws_vpc.myapp-vpc.id
-  avail_zone        = var.avail_zone
-  env_prefix        = var.env_prefix
-}
+#module "myapp-subnet" {
+#  source            = "./modules/subnet"
+#  subnet_cidr_block = var.subnet_cidr_block
+#  vpc_id            = module.vpc.vpc_id
+#  avail_zone        = var.avail_zone
+#  env_prefix        = var.env_prefix
+#}
 
 
 module "myapp-server" {
   source = "./modules/webserver"
   #   "vpc_cidr_block" {}
   #   "subnet_cidr_block" {}
-  vpc_id               = aws_vpc.myapp-vpc.id
+  vpc_id               = module.vpc.vpc_id
   avail_zone           = var.avail_zone
   env_prefix           = var.env_prefix
   my_ip                = var.my_ip
@@ -75,7 +60,7 @@ module "myapp-server" {
   image_name           = var.image_name
   public_key_location  = var.public_key_location
   private_key_location = var.private_key_location
-  subnet_id            = module.myapp-subnet.subnet.id
+  subnet_id            = module.vpc.public_subnets[0]
 }
 
 
